@@ -42,9 +42,9 @@ function newUrl(urlStr) {
 }
 
 // 检查 URL 是否符合规则
-function checkUrl(u) {
+function checkUrl(url) {
     for (let i of [exp1, exp2, exp3, exp4, exp5, exp6]) {
-        if (i.test(u)) {
+        if (i.test(url)) {
             return true;
         }
     }
@@ -124,71 +124,4 @@ export async function onRequest({ request }) {
 
     // 调用代理函数
     return proxy(url, reqInit);
-}
-
-// 处理特定路径的逻辑
-async function fetchHandler(e) {
-    const req = e.request;
-    const urlStr = req.url;
-    const urlObj = new URL(urlStr);
-    let path = urlObj.searchParams.get('q');
-    if (path) {
-        return Response.redirect('https://' + urlObj.host + PREFIX + path, 301);
-    }
-
-    // cfworker 会把路径中的 `//` 合并成 `/`
-    path = urlObj.href.substr(urlObj.origin.length + PREFIX.length).replace(/^https?:\/+/, 'https://');
-
-    if (path.search(exp1) === 0 || path.search(exp5) === 0 || path.search(exp6) === 0 || path.search(exp3) === 0 || path.search(exp4) === 0) {
-        return httpHandler(req, path);
-    } else if (path.search(exp2) === 0) {
-        if (Config.jsdelivr) {
-            const newUrl = path.replace('/blob/', '@').replace(/^(?:https?:\/\/)?github\.com/, 'https://cdn.jsdelivr.net/gh');
-            return Response.redirect(newUrl, 302);
-        } else {
-            path = path.replace('/blob/', '/raw/');
-            return httpHandler(req, path);
-        }
-    } else if (path.search(exp4) === 0) {
-        const newUrl = path.replace(/(?<=com\/.+?\/.+?)\/(.+?\/)/, '@$1').replace(/^(?:https?:\/\/)?raw\.(?:|github)\.com/, 'https://cdn.jsdelivr.net/gh');
-        return Response.redirect(newUrl, 302);
-    } else {
-        return fetch(ASSET_URL + path);
-    }
-}
-
-// 处理 HTTP 请求的逻辑
-function httpHandler(req, pathname) {
-    const reqHdrRaw = req.headers;
-
-    // preflight
-    if (req.method === 'OPTIONS' && reqHdrRaw.has('access-control-request-headers')) {
-        return new Response(null, PREFLIGHT_INIT);
-    }
-
-    const reqHdrNew = new Headers(reqHdrRaw);
-
-    let urlStr = pathname;
-    let flag = !Boolean(whiteList.length);
-    for (let i of whiteList) {
-        if (urlStr.includes(i)) {
-            flag = true;
-            break;
-        }
-    }
-    if (!flag) {
-        return new Response("blocked", { status: 403 });
-    }
-    if (urlStr.search(/^https?:\/\//) !== 0) {
-        urlStr = 'https://' + urlStr;
-    }
-    const urlObj = newUrl(urlStr);
-
-    const reqInit = {
-        method: req.method,
-        headers: reqHdrNew,
-        redirect: 'manual',
-        body: req.body
-    };
-    return proxy(urlObj, reqInit);
 }
