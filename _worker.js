@@ -1,203 +1,63 @@
-'use strict';
+// _worker.js
+export default {
+    async fetch(request, env) {
+        'use strict';
 
-// 配置部分
-const ASSET_URL = 'https://hunshcn.github.io/gh-proxy/';
-const PREFIX = '/';
-const Config = {
-    jsdelivr: 0 // 分支文件使用 jsDelivr 镜像的开关，0 为关闭
+        const ASSET_URL = env.ASSET_URL || 'https://hunshcn.github.io/gh-proxy/';
+        const PREFIX = env.PREFIX || '/';
+        const Config = { jsdelivr: env.jsdelivr || 0 };
+        
+        // 正则表达式集（保持原样）
+        const exp1 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/(?:releases|archive)\/.*$/i;
+        const exp2 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/(?:blob|raw)\/.*$/i;
+        const exp3 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/(?:info|git-).*$/i;
+        const exp4 = /^(?:https?:\/\/)?raw\.(?:githubusercontent|github)\.com\/.+?\/.+?\/.+?\/.+$/i;
+        const exp5 = /^(?:https?:\/\/)?gist\.(?:githubusercontent|github)\.com\/.+?\/.+?\/.+$/i;
+        const exp6 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/tags.*$/i;
+
+        // 核心处理逻辑
+        const url = new URL(request.url);
+        let path = url.searchParams.get('q') || 
+                  url.pathname.replace(new RegExp(`^${PREFIX}`), '');
+
+        // 重定向处理
+        if (url.searchParams.has('q')) {
+            return Response.redirect(`https://${url.host}${PREFIX}${path}`, 301);
+        }
+
+        // 路径匹配逻辑
+        if ([exp1, exp5, exp6, exp3, exp4].some(exp => path.match(exp))) {
+            return handleProxy(request, path, Config);
+        } else if (path.match(exp2)) {
+            const newPath = Config.jsdelivr ? 
+                path.replace('/blob/', '@').replace(/^github\.com/, 'cdn.jsdelivr.net/gh') :
+                path.replace('/blob/', '/raw/');
+            return Response.redirect(newPath, 302);
+        }
+
+        // 静态资源回退
+        return fetch(`${ASSET_URL}${path}`);
+    }
 };
-const whiteList = []; // 白名单，路径中包含这些字符的才会通过
 
-// CORS 预请求响应配置
-const PREFLIGHT_INIT = {
-    status: 204,
-    headers: new Headers({
-        'access-control-allow-origin': '*',
-        'access-control-allow-methods': 'GET,POST,PUT,PATCH,TRACE,DELETE,HEAD,OPTIONS',
-        'access-control-max-age': '1728000',
-    }),
-};
-
-// 正则表达式
-const exp1 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/(?:releases|archive)\/.*$/i;
-const exp2 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/(?:blob|raw)\/.*$/i;
-const exp3 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/(?:info|git-).*$/i;
-const exp4 = /^(?:https?:\/\/)?raw\.(?:githubusercontent|github)\.com\/.+?\/.+?\/.+?\/.+$/i;
-const exp5 = /^(?:https?:\/\/)?gist\.(?:githubusercontent|github)\.com\/.+?\/.+?\/.+$/i;
-const exp6 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/tags.*$/i;
-
-// 创建响应的辅助函数
-function makeRes(body, status = 200, headers = {}) {
-    headers['access-control-allow-origin'] = '*';
-    return new Response(body, { status, headers });
-}
-
-// 创建 URL 的辅助函数
-function newUrl(urlStr) {
-    try {
-        return new URL(urlStr);
-    } catch (err) {
-        return null;
-    }
-}
-
-// 检查 URL 是否符合规则
-function checkUrl(u) {
-    for (let i of [exp1, exp2, exp3, exp4, exp5, exp6]) {
-        if (i.test(u)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// 代理请求的主逻辑
-async function proxy(urlObj, reqInit, depth = 0) {
-    if (depth > 5) { // 设置递归深度限制
-        return makeRes("Too many redirects", 508);
-    }
-
-    const res = await fetch(urlObj.href, reqInit);
-    const resHdrOld = res.headers;
-    const resHdrNew = new Headers(resHdrOld);
-
-    const status = res.status;
-
-    if (resHdrNew.has('location')) {
-        let _location = resHdrNew.get('location');
-        if (checkUrl(_location)) {
-            resHdrNew.set('location', PREFIX + _location);
-        } else {
-            reqInit.redirect = 'follow';
-            const newUrlObj = newUrl(_location);
-            if (newUrlObj) {
-                return proxy(newUrlObj, reqInit, depth + 1); // 递归调用
-            } else {
-                return makeRes("Invalid URL", 400);
-            }
-        }
-    }
-
-    resHdrNew.set('access-control-expose-headers', '*');
-    resHdrNew.set('access-control-allow-origin', '*');
-
-    resHdrNew.delete('content-security-policy');
-    resHdrNew.delete('content-security-policy-report-only');
-    resHdrNew.delete('clear-site-data');
-
-    return new Response(res.body, {
-        status,
-        headers: resHdrNew,
-    });
-}
-
-// 处理请求的入口函数
-export async function onRequest({ request }) {
-    const urlObj = new URL(request.url);
-    let path = urlObj.pathname;
-
-    // 如果是预请求（OPTIONS 方法），直接返回 CORS 预请求响应
-    if (request.method === 'OPTIONS' && request.headers.has('access-control-request-headers')) {
-        return new Response(null, PREFLIGHT_INIT);
-    }
-
-    // 检查白名单
-    let flag = !Boolean(whiteList.length);
-    for (let i of whiteList) {
-        if (path.includes(i)) {
-            flag = true;
-            break;
-        }
-    }
-    if (!flag) {
-        return makeRes("blocked", 403);
-    }
-
-    // 处理路径
-    if (!path.startsWith('https://')) {
-        path = 'https://' + path;
-    }
-
-    const url = newUrl(path);
-    if (!url) {
-        return makeRes("Invalid URL", 400);
-    }
-
-    // 创建请求初始化对象
-    const reqInit = {
+// 代理处理函数
+async function handleProxy(request, path, config) {
+    const init = {
         method: request.method,
-        headers: request.headers,
-        redirect: 'manual',
-        body: request.body,
+        headers: new Headers(request.headers),
+        redirect: 'manual'
     };
-
-    // 调用代理函数
-    return proxy(url, reqInit);
-}
-
-// 处理特定路径的逻辑
-async function fetchHandler(e) {
-    const req = e.request;
-    const urlStr = req.url;
-    const urlObj = new URL(urlStr);
-    let path = urlObj.searchParams.get('q');
-    if (path) {
-        return Response.redirect('https://' + urlObj.host + PREFIX + path, 301);
-    }
-
-    // cfworker 会把路径中的 `//` 合并成 `/`
-    path = urlObj.href.substr(urlObj.origin.length + PREFIX.length).replace(/^https?:\/+/, 'https://');
-
-    if (path.search(exp1) === 0 || path.search(exp5) === 0 || path.search(exp6) === 0 || path.search(exp3) === 0 || path.search(exp4) === 0) {
-        return httpHandler(req, path);
-    } else if (path.search(exp2) === 0) {
-        if (Config.jsdelivr) {
-            const newUrl = path.replace('/blob/', '@').replace(/^(?:https?:\/\/)?github\.com/, 'https://cdn.jsdelivr.net/gh');
-            return Response.redirect(newUrl, 302);
-        } else {
-            path = path.replace('/blob/', '/raw/');
-            return httpHandler(req, path);
-        }
-    } else if (path.search(exp4) === 0) {
-        const newUrl = path.replace(/(?<=com\/.+?\/.+?)\/(.+?\/)/, '@$1').replace(/^(?:https?:\/\/)?raw\.(?:|github)\.com/, 'https://cdn.jsdelivr.net/gh');
-        return Response.redirect(newUrl, 302);
-    } else {
-        return fetch(ASSET_URL + path);
-    }
-}
-
-// 处理 HTTP 请求的逻辑
-function httpHandler(req, pathname) {
-    const reqHdrRaw = req.headers;
-
-    // preflight
-    if (req.method === 'OPTIONS' && reqHdrRaw.has('access-control-request-headers')) {
-        return new Response(null, PREFLIGHT_INIT);
-    }
-
-    const reqHdrNew = new Headers(reqHdrRaw);
-
-    let urlStr = pathname;
-    let flag = !Boolean(whiteList.length);
-    for (let i of whiteList) {
-        if (urlStr.includes(i)) {
-            flag = true;
-            break;
-        }
-    }
-    if (!flag) {
-        return new Response("blocked", { status: 403 });
-    }
-    if (urlStr.search(/^https?:\/\//) !== 0) {
-        urlStr = 'https://' + urlStr;
-    }
-    const urlObj = newUrl(urlStr);
-
-    const reqInit = {
-        method: req.method,
-        headers: reqHdrNew,
-        redirect: 'manual',
-        body: req.body
-    };
-    return proxy(urlObj, reqInit);
+    
+    const targetUrl = path.startsWith('http') ? path : `https://${path}`;
+    const response = await fetch(targetUrl, init);
+    
+    // 响应头处理
+    const newHeaders = new Headers(response.headers);
+    newHeaders.set('access-control-allow-origin', '*');
+    newHeaders.delete('content-security-policy');
+    
+    return new Response(response.body, {
+        status: response.status,
+        headers: newHeaders
+    });
 }

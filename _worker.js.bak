@@ -52,7 +52,11 @@ function checkUrl(u) {
 }
 
 // 代理请求的主逻辑
-async function proxy(urlObj, reqInit) {
+async function proxy(urlObj, reqInit, depth = 0) {
+    if (depth > 5) { // 设置递归深度限制
+        return makeRes("Too many redirects", 508);
+    }
+
     const res = await fetch(urlObj.href, reqInit);
     const resHdrOld = res.headers;
     const resHdrNew = new Headers(resHdrOld);
@@ -65,7 +69,12 @@ async function proxy(urlObj, reqInit) {
             resHdrNew.set('location', PREFIX + _location);
         } else {
             reqInit.redirect = 'follow';
-            return proxy(newUrl(_location), reqInit);
+            const newUrlObj = newUrl(_location);
+            if (newUrlObj) {
+                return proxy(newUrlObj, reqInit, depth + 1); // 递归调用
+            } else {
+                return makeRes("Invalid URL", 400);
+            }
         }
     }
 
