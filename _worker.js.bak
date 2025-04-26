@@ -6,7 +6,7 @@ export default {
         const ASSET_URL = env.ASSET_URL || 'https://hunshcn.github.io/gh-proxy/';
         const PREFIX = env.PREFIX || '/';
         const Config = { jsdelivr: env.jsdelivr || 0 };
-
+        
         // 正则表达式集（保持原样）
         const exp1 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/(?:releases|archive)\/.*$/i;
         const exp2 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/(?:blob|raw)\/.*$/i;
@@ -15,13 +15,24 @@ export default {
         const exp5 = /^(?:https?:\/\/)?gist\.(?:githubusercontent|github)\.com\/.+?\/.+?\/.+$/i;
         const exp6 = /^(?:https?:\/\/)?github\.com\/.+?\/.+?\/tags.*$/i;
 
+        // 核心处理逻辑
         const url = new URL(request.url);
         let path = url.searchParams.get('q') || 
                   url.pathname.replace(new RegExp(`^${PREFIX}`), '');
 
-        // 移除重定向逻辑，直接处理所有匹配请求
-        if ([exp1, exp2, exp5, exp6, exp3, exp4].some(exp => path.match(exp))) {
+        // 重定向处理
+        if (url.searchParams.has('q')) {
+            return Response.redirect(`https://${url.host}${PREFIX}${path}`, 301);
+        }
+
+        // 路径匹配逻辑
+        if ([exp1, exp5, exp6, exp3, exp4].some(exp => path.match(exp))) {
             return handleProxy(request, path, Config);
+        } else if (path.match(exp2)) {
+            const newPath = Config.jsdelivr ? 
+                path.replace('/blob/', '@').replace(/^github\.com/, 'cdn.jsdelivr.net/gh') :
+                path.replace('/blob/', '/raw/');
+            return Response.redirect(newPath, 302);
         }
 
         // 静态资源回退
@@ -29,45 +40,22 @@ export default {
     }
 };
 
+// 代理处理函数
 async function handleProxy(request, path, config) {
-    let targetUrl;
-
-    // 处理不同路径模式
-    if (path.match(/(?:blob|raw)\//i)) {
-        // 处理 GitHub blob/raw 路径
-        const [domain, ...rest] = path.split('/');
-        const repoPath = rest.join('/').replace(/\/(blob|raw)\//, '/');
-
-        if (config.jsdelivr) {
-            // 使用 jsDelivr CDN
-            const [repo, branchOrTag, ...fileParts] = repoPath.split('/');
-            targetUrl = `https://cdn.jsdelivr.net/gh/${repo}@${branchOrTag}/${fileParts.join('/')}`;
-        } else {
-            // 转换为 raw.githubusercontent.com 格式
-            targetUrl = `https://raw.githubusercontent.com/${repoPath}`;
-        }
-    } else {
-        // 其他模式直接构造目标 URL
-        targetUrl = path.startsWith('http') 
-            ? path 
-            : `https://${path}`;
-    }
-
-    // 构造请求
     const init = {
         method: request.method,
         headers: new Headers(request.headers),
         redirect: 'manual'
     };
-
-    // 发起代理请求
+    
+    const targetUrl = path.startsWith('http') ? path : `https://${path}`;
     const response = await fetch(targetUrl, init);
-
-    // 处理响应头
+    
+    // 响应头处理
     const newHeaders = new Headers(response.headers);
     newHeaders.set('access-control-allow-origin', '*');
     newHeaders.delete('content-security-policy');
-
+    
     return new Response(response.body, {
         status: response.status,
         headers: newHeaders
