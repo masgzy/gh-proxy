@@ -349,7 +349,15 @@
         function copy() {
             navigator.clipboard.writeText(lastUrl).then(() => toast('已复制')).catch(() => toast('复制失败', true));
         }
-        function open() { window.open(lastUrl, '_blank'); }
+        function open() {
+            const a = document.createElement('a');
+            a.href = lastUrl;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
 
         function toast(msg, warn) {
             const sb = document.getElementById('snackbar');
