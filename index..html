@@ -277,7 +277,7 @@
             <div class="result-url" id="resultUrl"></div>
             <div class="result-actions">
                 <button class="btn" onclick="copy()">复制</button>
-                <button class="btn" onclick="open()">打开</button>
+                <button class="btn" onclick="openLink()">打开</button>
             </div>
         </div>
 
@@ -349,7 +349,8 @@
         function copy() {
             navigator.clipboard.writeText(lastUrl).then(() => toast('已复制')).catch(() => toast('复制失败', true));
         }
-        function open() {
+        function openLink() {
+            if (!lastUrl) { toast('请先生成链接', true); return; }
             const a = document.createElement('a');
             a.href = lastUrl;
             a.target = '_blank';
