@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub 加速</title>
+    <style>
+        :root {
+            --primary: #6750A4;
+            --primary-container: #EADDFF;
+            --on-primary-container: #21005D;
+            --tertiary: #7D5260;
+            --tertiary-container: #FFD8E4;
+            --surface: #FEF7FF;
+            --surface-container-low: #F7F2FA;
+            --surface-container: #F3EDF7;
+            --surface-container-high: #ECE6F0;
+            --on-surface: #1D1B20;
+            --on-surface-variant: #49454F;
+            --outline: #79747E;
+            --outline-variant: #CAC4D0;
+            --inverse-surface: #322F35;
+            --inverse-on-surface: #F5EFF7;
+            --inverse-primary: #D0BCFF;
+            --error: #B3261E;
+        }
+        [data-theme="dark"] {
+            --primary: #D0BCFF;
+            --primary-container: #4F378B;
+            --on-primary-container: #EADDFF;
+            --tertiary: #EFB8C8;
+            --tertiary-container: #633B48;
+            --surface: #141218;
+            --surface-container-low: #1D1B20;
+            --surface-container: #211F26;
+            --surface-container-high: #2B2930;
+            --on-surface: #E6E0E9;
+            --on-surface-variant: #CAC4D0;
+            --outline: #938F99;
+            --outline-variant: #49454F;
+            --inverse-surface: #E6E0E9;
+            --inverse-on-surface: #322F35;
+            --inverse-primary: #6750A4;
+            --error: #F2B8B5;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--surface);
+            color: var(--on-surface);
+            min-height: 100vh;
+            font-size: 14px;
+            line-height: 1.5;
+            transition: background .3s, color .3s;
+        }
+        .app-bar {
+            background: var(--surface-container);
+            border-bottom: 1px solid var(--outline-variant);
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .app-bar-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+        .app-bar-icon {
+            width: 32px; height: 32px;
+            border-radius: 50%;
+            background: var(--primary-container);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .app-bar-icon svg { width: 18px; height: 18px; fill: var(--on-primary-container); }
+
+        .content {
+            /* 关键: 限定最大宽度,缩小后保持比例,不会无限缩 */
+            max-width: 560px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 20px 14px 32px;
+        }
+        .hero-title { font-size: 1.25rem; font-weight: 500; margin-bottom: 4px; }
+        .hero-subtitle { font-size: .8125rem; color: var(--on-surface-variant); margin-bottom: 16px; }
+
+        .input-wrap { position: relative; margin-bottom: 12px; }
+        .input {
+            width: 100%;
+            padding: 10px 36px 10px 36px;
+            font-size: .8125rem;
+            font-family: ui-monospace, "SF Mono", Consolas, monospace;
+            color: var(--on-surface);
+            background: transparent;
+            border: 1px solid var(--outline);
+            border-radius: 6px;
+            outline: none;
+            transition: border-color .15s;
+        }
+        .input:focus { border-color: var(--primary); border-width: 2px; padding: 9px 35px 9px 35px; }
+        .input-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--on-surface-variant); pointer-events: none; }
+        .input-clear {
+            position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            width: 24px; height: 24px; border-radius: 50%; border: none;
+            background: transparent; color: var(--on-surface-variant);
+            cursor: pointer; display: none; align-items: center; justify-content: center;
+        }
+        .input:not(:placeholder-shown) ~ .input-clear { display: flex; }
+
+        .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+        .card {
+            background: var(--surface-container-low);
+            border-radius: 10px;
+            padding: 12px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            text-align: left;
+            font-family: inherit;
+            color: inherit;
+            transition: background .15s, transform .1s, border-color .15s;
+        }
+        .card:hover { background: var(--surface-container); border-color: var(--outline-variant); }
+        .card:active { transform: scale(.98); }
+        .card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .card-avatar {
+            width: 28px; height: 28px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .card-avatar.cf { background: var(--primary-container); color: var(--primary); }
+        .card-avatar.pip { background: var(--tertiary-container); color: var(--tertiary); }
+        .card-avatar svg { width: 16px; height: 16px; }
+        .card-title { font-size: .875rem; font-weight: 500; }
+        .card-domain { font-size: .6875rem; color: var(--on-surface-variant); font-family: ui-monospace, monospace; }
+        .card-desc { font-size: .75rem; color: var(--on-surface-variant); }
+
+        .result {
+            display: none;
+            background: var(--primary-container);
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 12px;
+        }
+        .result.show { display: block; }
+        .result-label { font-size: .6875rem; font-weight: 600; color: var(--on-primary-container); opacity: .7; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+        .result-url { font-family: ui-monospace, monospace; font-size: .75rem; color: var(--on-primary-container); word-break: break-all; }
+        .result-actions { display: flex; gap: 6px; margin-top: 10px; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 6px; border: none;
+            background: var(--inverse-primary); color: var(--on-primary-container);
+            font-size: .75rem; font-weight: 500; cursor: pointer; font-family: inherit;
+        }
+        .btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+
+        /* 折叠区域 - 默认收起,详情 */
+        details.advanced {
+            background: var(--surface-container-low);
+            border-radius: 10px;
+            padding: 0;
+            margin-bottom: 12px;
+        }
+        details.advanced > summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 10px 14px;
+            font-size: .8125rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        details.advanced > summary::-webkit-details-marker { display: none; }
+        details.advanced > summary::after {
+            content: "▾";
+            color: var(--on-surface-variant);
+            transition: transform .2s;
+        }
+        details.advanced[open] > summary::after { transform: rotate(180deg); }
+        .advanced-body { padding: 0 14px 12px; }
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+        .chip {
+            font-family: ui-monospace, monospace;
+            font-size: .6875rem;
+            color: var(--on-surface-variant);
+            background: var(--surface-container-high);
+            border: 1px solid var(--outline-variant);
+            border-radius: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-family: inherit;
+            word-break: break-all;
+            text-align: left;
+            max-width: 100%;
+        }
+        .chip:hover { background: var(--surface-container-highest); }
+        .chip-label { color: var(--primary); font-weight: 600; margin-right: 4px; font-size: .625rem; }
+
+        .footer { text-align: center; padding: 12px 0; font-size: .6875rem; color: var(--on-surface-variant); }
+
+        .snackbar {
+            position: fixed; bottom: 20px; left: 50%;
+            transform: translateX(-50%) translateY(60px);
+            background: var(--inverse-surface); color: var(--inverse-on-surface);
+            padding: 8px 16px; border-radius: 6px; font-size: .8125rem;
+            opacity: 0; transition: all .25s; pointer-events: none; z-index: 1000;
+        }
+        .snackbar.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+        .theme-btn {
+            width: 32px; height: 32px; border-radius: 6px; border: none;
+            background: var(--surface-container-high); color: var(--on-surface-variant);
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .theme-btn:hover { background: var(--surface-container-highest); }
+
+        @media (max-width: 360px) {
+            .cards { grid-template-columns: 1fr; }
+            .content { padding: 16px 10px 24px; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            * { transition: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <header class="app-bar">
+        <div class="app-bar-title">
+            <span class="app-bar-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            </span>
+            GitHub 加速
+        </div>
+        <button class="theme-btn" onclick="toggleTheme()" aria-label="切换主题">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+    </header>
+
+    <main class="content">
+        <h1 class="hero-title">选择加速通道</h1>
+        <p class="hero-subtitle">输入 GitHub 链接,选择最适合你网络的加速方式</p>
+
+        <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            <input type="text" class="input" id="urlInput" placeholder="github.com/..." autocomplete="off">
+            <button class="input-clear" onclick="clearInput()" aria-label="清空">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+
+        <div class="cards">
+            <button class="card" onclick="go('gh.996855.xyz')">
+                <div class="card-head">
+                    <div class="card-avatar cf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+                    <div>
+                        <div class="card-title">CF 优选</div>
+                        <div class="card-domain">gh.996855.xyz</div>
+                    </div>
+                </div>
+                <div class="card-desc">自动选延迟最低的 CF 节点,大多数场景首选</div>
+            </button>
+            <button class="card" onclick="go('pip.996855.xyz')">
+                <div class="card-head">
+                    <div class="card-avatar pip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+                    <div>
+                        <div class="card-title">ProxyIP</div>
+                        <div class="card-domain">pip.996855.xyz</div>
+                    </div>
+                </div>
+                <div class="card-desc">自定义 ProxyIP 节点,适合特殊网络环境</div>
+            </button>
+        </div>
+
+        <div class="result" id="result">
+            <div class="result-label">加速链接</div>
+            <div class="result-url" id="resultUrl"></div>
+            <div class="result-actions">
+                <button class="btn" onclick="copy()">复制</button>
+                <button class="btn" onclick="open()">打开</button>
+            </div>
+        </div>
+
+        <details class="advanced" open>
+            <summary>示例 & 说明</summary>
+            <div class="advanced-body">
+                <div class="chips" id="chips"></div>
+                <p style="font-size:.75rem;color:var(--on-surface-variant);margin-top:10px;line-height:1.6">
+                    支持 release / archive / raw / blob / gist 链接。<br>
+                    不支持浏览项目文件夹。
+                </p>
+            </div>
+        </details>
+
+        <footer class="footer">基于 Cloudflare Pages</footer>
+    </main>
+
+    <div class="snackbar" id="snackbar"></div>
+
+    <script>
+        const examples = [
+            { label: '源码', url: 'https://github.com/hunshcn/project/archive/master.zip' },
+            { label: 'Release', url: 'https://github.com/hunshcn/project/releases/download/v0.1.0/example.zip' },
+            { label: 'Raw', url: 'https://raw.githubusercontent.com/hunshcn/project/master/README.md' },
+            { label: 'Clone', url: 'git clone https://github.com/hunshcn/project.git' },
+        ];
+        const chips = document.getElementById('chips');
+        examples.forEach(e => {
+            const c = document.createElement('button');
+            c.className = 'chip';
+            c.innerHTML = `<span class="chip-label">${e.label}</span>${e.url}`;
+            c.title = e.url;
+            c.onclick = () => { document.getElementById('urlInput').value = e.url; };
+            chips.appendChild(c);
+        });
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const next = html.dataset.theme === 'dark' ? 'light' : 'dark';
+            html.dataset.theme = next;
+            localStorage.setItem('theme', next);
+        }
+        const saved = localStorage.getItem('theme');
+        if (saved) document.documentElement.dataset.theme = saved;
+        else if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.dataset.theme = 'dark';
+
+        function clearInput() {
+            document.getElementById('urlInput').value = '';
+            document.getElementById('result').classList.remove('show');
+        }
+
+        function buildUrl(domain, url) {
+            url = url.trim();
+            if (url.startsWith('git clone ')) url = url.replace('git clone ', '').trim();
+            return 'https://' + domain + '/' + url;
+        }
+
+        let lastUrl = '';
+        function go(domain) {
+            const v = document.getElementById('urlInput').value.trim();
+            if (!v) { toast('请输入 GitHub 链接', true); return; }
+            const url = buildUrl(domain, v);
+            lastUrl = url;
+            document.getElementById('resultUrl').textContent = url;
+            document.getElementById('result').classList.add('show');
+            window.open(url, '_blank');
+        }
+
+        function copy() {
+            navigator.clipboard.writeText(lastUrl).then(() => toast('已复制')).catch(() => toast('复制失败', true));
+        }
+        function open() { window.open(lastUrl, '_blank'); }
+
+        function toast(msg, warn) {
+            const sb = document.getElementById('snackbar');
+            sb.textContent = msg;
+            sb.style.background = warn ? 'var(--error)' : 'var(--inverse-surface)';
+            sb.style.color = warn ? '#fff' : 'var(--inverse-on-surface)';
+            sb.classList.add('show');
+            clearTimeout(toast._t);
+            toast._t = setTimeout(() => sb.classList.remove('show'), 2000);
+        }
+
+        document.getElementById('urlInput').addEventListener('input', function() {
+            if (!this.value.trim()) document.getElementById('result').classList.remove('show');
+        });
+        document.getElementById('urlInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') go('gh.996855.xyz');
+        });
+    </script>
+</body>
+</html>
