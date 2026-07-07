@@ -1,118 +1,74 @@
-# gh-proxy
+# GitHub 加速
 
-## 简介
-
-github release、archive以及项目文件的加速项目，支持clone，有Cloudflare Workers无服务器版本以及Python版本
+> GitHub release、archive、raw、gist 等资源加速，基于 Cloudflare Pages Workers。
 
 ## 演示
 
-[https://gh.api.99988866.xyz/](https://gh.api.99988866.xyz/)
+- 主站：https://gh.996855.xyz/
+- 备站：https://pip.996855.xyz/
 
-演示站为公共服务，如有大规模使用需求请自行部署，演示站有点不堪重负
+两个域名均部署在 Cloudflare Pages，自动选择延迟最低的边缘节点。
+大量使用请自行部署，公共服务不承担稳定性保障。
 
-![imagea272c95887343279.png](https://img.maocdn.cn/img/2021/04/24/imagea272c95887343279.png)
+## 功能
 
-当然也欢迎[捐赠](#捐赠)以支持作者
+- 支持 release / archive / raw / blob / gist 链接代理
+- Range 请求透传，断点续传可用
+- 边缘缓存命中相同资源，节省 GitHub API 配额
+- 自动跟随 3xx 重定向，对 release → S3 链路透明
+- 完整 CORS 头，浏览器 fetch/curl/git clone 均可用
 
-## python版本和cf worker版本差异
+## 合法输入示例
 
-- python版本支持进行文件大小限制，超过设定返回原地址 [issue #8](https://github.com/hunshcn/gh-proxy/issues/8)
+> 文件不存在仅为示例
 
-- python版本支持特定user/repo 封禁/白名单 以及passby [issue #41](https://github.com/hunshcn/gh-proxy/issues/41)
+- 分支源码：`https://github.com/user/project/archive/master.zip`
+- release 源码：`https://github.com/user/project/archive/v0.1.0.tar.gz`
+- release 文件：`https://github.com/user/project/releases/download/v0.1.0/example.zip`
+- 分支文件：`https://github.com/user/project/blob/master/filename`
+- commit 文件：`https://github.com/user/project/blob/<sha>/filename`
+- gist：`https://gist.githubusercontent.com/user/<id>/raw/cmd.py`
+- git clone：`https://USER:TOKEN@gh.996855.xyz/https://github.com/user/project`（私有仓库）
 
-## 使用
+## 部署
 
-直接在copy出来的url前加`https://gh.api.99988866.xyz/`即可
+### Cloudflare Pages
 
-也可以直接访问，在input输入
+1. 打开 https://pages.cloudflare.com/ ，登录后 `Create application` → `Direct Upload`
+2. 把仓库根目录的 `_worker.js` 和 `index.html` 上传
+3. 在 `Settings → Environment variables` 配置：
+   - `ASSET_URL`：`https://你的pages域名/` （静态首页 URL）
+   - `PREFIX`：`/` （自定义子路径时改为 `/gh/` 这种）
 
-***大量使用请自行部署，以上域名仅为演示使用。***
+### 路由
 
-访问私有仓库可以通过
+| 访问方式 | 行为 |
+|---------|------|
+| `https://gh.996855.xyz/` | 访问首页（静态资源） |
+| `https://gh.996855.xyz/?q=<github_url>` | 代理 GitHub 链接 |
+| `https://gh.996855.xyz/<github_url>` | 同上（路径式） |
 
-`git clone https://user:TOKEN@ghproxy.com/https://github.com/xxxx/xxxx` [#71](https://github.com/hunshcn/gh-proxy/issues/71)
+## 本地调试
 
-以下都是合法输入（仅示例，文件不存在）：
-
-- 分支源码：https://github.com/hunshcn/project/archive/master.zip
-
-- release源码：https://github.com/hunshcn/project/archive/v0.1.0.tar.gz
-
-- release文件：https://github.com/hunshcn/project/releases/download/v0.1.0/example.zip
-
-- 分支文件：https://github.com/hunshcn/project/blob/master/filename
-
-- commit文件：https://github.com/hunshcn/project/blob/1111111111111111111111111111/filename
-
-- gist：https://gist.githubusercontent.com/cielpy/351557e6e465c12986419ac5a4dd2568/raw/cmd.py
-
-## cf worker版本部署
-
-首页：https://workers.cloudflare.com
-
-注册，登陆，`Start building`，取一个子域名，`Create a Worker`。
-
-复制 [index.js](https://cdn.jsdelivr.net/gh/hunshcn/gh-proxy@master/index.js)  到左侧代码框，`Save and deploy`。如果正常，右侧应显示首页。
-
-`ASSET_URL`是静态资源的url（实际上就是现在显示出来的那个输入框单页面）
-
-`PREFIX`是前缀，默认（根路径情况为"/"），如果自定义路由为example.com/gh/*，请将PREFIX改为 '/gh/'，注意，少一个杠都会错！
-
-## Python版本部署
-
-### Docker部署
-
-```
-docker run -d --name="gh-proxy-py" \
-  -p 0.0.0.0:80:80 \
-  --restart=always \
-  hunsh/gh-proxy-py:latest
+```bash
+npm install -g wrangler
+wrangler pages dev ./
 ```
 
-第一个80是你要暴露出去的端口
+## 计费参考
 
-### 直接部署
+Cloudflare Workers 免费额度：
+- 每天 10 万次请求
+- 每分钟 1000 次请求
 
-安装依赖（请使用python3）
+超出后升级为 $5/月套餐，包含每月 1000 万次请求。
+边缘缓存命中不计费（仅产生校验请求）。
 
-```pip install flask requests```
+## 致谢
 
-按需求修改`app/main.py`的前几项配置
+基于开源项目 [hunshcn/gh-proxy](https://github.com/hunshcn/gh-proxy) 二次开发，
+原项目采用 MIT 协议。
 
-*注意:* 可能需要在`return Response`前加两行
-```python3
-if 'Transfer-Encoding' in headers:
-    headers.pop('Transfer-Encoding')
-```
+## License
 
-### 注意
-
-python版本的机器如果无法正常访问github.io会启动报错，请自行修改静态文件url
-
-python版本默认走服务器（2021.3.27更新）
-
-## Cloudflare Workers计费
-
-到 `overview` 页面可参看使用情况。免费版每天有 10 万次免费请求，并且有每分钟1000次请求的限制。
-
-如果不够用，可升级到 $5 的高级版本，每月可用 1000 万次请求（超出部分 $0.5/百万次请求）。
-
-## Changelog
-
-* 2020.04.10 增加对`raw.githubusercontent.com`文件的支持
-* 2020.04.09 增加Python版本（使用Flask）
-* 2020.03.23 新增了clone的支持
-* 2020.03.22 初始版本
-
-## 链接
-
-[我的博客](https://hunsh.net)
-
-## 参考
-
-[jsproxy](https://github.com/EtherDream/jsproxy/)
-
-## 捐赠
-
-![wx.png](https://img.maocdn.cn/img/2021/04/24/image.md.png)
-![ali.png](https://www.helloimg.com/images/2021/04/24/BK9vmb.md.png)
+MIT
